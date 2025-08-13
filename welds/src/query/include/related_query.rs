@@ -59,7 +59,7 @@ where
         let exist_in = ExistIn::new(
             &primary_query,
             self.out_col.clone(),
-            self.inner_tn.clone(),
+            self.inner_tn,
             self.inner_col.clone(),
         );
         qb.exist_ins.push(exist_in);
@@ -79,7 +79,7 @@ where
         let exist_in = ExistIn::new(
             &primary_query,
             self.out_col.clone(),
-            self.inner_tn.clone(),
+            self.inner_tn,
             self.inner_col.clone(),
         );
         qb.exist_ins.push(exist_in);
