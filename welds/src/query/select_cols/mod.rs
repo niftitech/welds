@@ -76,7 +76,7 @@ where
     pub fn select_as<V, FN: AsFieldName<V>>(
         mut self,
         lam: impl Fn(<T as HasSchema>::Schema) -> FN,
-        as_name: &'static str,
+        as_name: &str,
     ) -> SelectBuilder<T> {
         let field = lam(Default::default());
         self.selects.push(SelectColumn {
@@ -90,7 +90,7 @@ where
     pub fn select_count<V, FN: AsFieldName<V>>(
         mut self,
         lam: impl Fn(<T as HasSchema>::Schema) -> FN,
-        as_name: &'static str,
+        as_name: &str,
     ) -> SelectBuilder<T> {
         let field = lam(Default::default());
         self.selects.push(SelectColumn {
@@ -104,7 +104,7 @@ where
     pub fn select_max<V, FN: AsFieldName<V>>(
         mut self,
         lam: impl Fn(<T as HasSchema>::Schema) -> FN,
-        as_name: &'static str,
+        as_name: &str,
     ) -> SelectBuilder<T> {
         let field = lam(Default::default());
         self.selects.push(SelectColumn {
@@ -118,7 +118,7 @@ where
     pub fn select_min<V, FN: AsFieldName<V>>(
         mut self,
         lam: impl Fn(<T as HasSchema>::Schema) -> FN,
-        as_name: &'static str,
+        as_name: &str,
     ) -> SelectBuilder<T> {
         let field = lam(Default::default());
         self.selects.push(SelectColumn {

@@ -143,7 +143,7 @@ where
     pub fn where_manual<V, FN>(
         mut self,
         col: impl Fn(<T as HasSchema>::Schema) -> FN,
-        sql: &'static str,
+        sql: &str,
         params: impl Into<ManualParam>,
     ) -> Self
     where
@@ -190,7 +190,7 @@ where
     /// }
     /// ```
     ///
-    pub fn where_manual2(mut self, sql: &'static str, params: impl Into<ManualParam>) -> Self {
+    pub fn where_manual2(mut self, sql: &str, params: impl Into<ManualParam>) -> Self {
         let params: ManualParam = params.into();
         let c = clause::ClauseColManual {
             col: None,
@@ -353,7 +353,7 @@ where
     pub fn select_as<V, FN: AsFieldName<V>>(
         self,
         lam: impl Fn(<T as HasSchema>::Schema) -> FN,
-        as_name: &'static str,
+        as_name: &str,
     ) -> SelectBuilder<T> {
         SelectBuilder::new(self).select_as(lam, as_name)
     }
