@@ -38,6 +38,7 @@ impl WeldsError {
     #[deprecated(
         note = "please use `WeldsError::RowNotFound` instead. RowNowFound will be removed in the next release"
     )]
+    #[allow(non_upper_case_globals)]
     pub const RowNowFound: WeldsError = WeldsError::RowNotFound;
 }
 
