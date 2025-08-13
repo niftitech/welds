@@ -273,7 +273,7 @@ where
 
     /// Manually write the order by part of the query.
     /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
-    pub fn order_manual(mut self, sql: &'static str) -> Self {
+    pub fn order_manual(mut self, sql: &str) -> Self {
         self.qb = self.qb.order_manual(sql);
         self
     }

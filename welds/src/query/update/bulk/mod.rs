@@ -158,7 +158,7 @@ where
     pub fn set_manual<V, FIELD>(
         mut self,
         lam: impl Fn(<T as HasSchema>::Schema) -> FIELD,
-        sql: &'static str,
+        sql: &str,
         params: impl Into<ManualParam>,
     ) -> Self
     where
