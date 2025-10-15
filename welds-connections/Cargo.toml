@@ -18,7 +18,16 @@ description = "An async ORM for (postgres, mssql, mysql, sqlite)"
 "postgres" = ["sqlx/postgres"]
 "mysql" = ["sqlx/mysql"]
 "sqlite" = ["sqlx/sqlite"]
-"mssql" = ["tokio", "tokio-util", "futures-util", "tiberius", "bb8-tiberius", "bb8", "futures", "async-mutex"]
+"mssql" = [
+    "tokio",
+    "tokio-util",
+    "futures-util",
+    "tiberius",
+    "bb8-tiberius",
+    "bb8",
+    "futures",
+    "async-mutex",
+]
 "mssql-chrono" = ["tiberius/chrono"]
 "mssql-time" = ["tiberius/time"]
 "mssql-rust_decimal" = ["tiberius/rust_decimal"]
@@ -31,12 +40,11 @@ description = "An async ORM for (postgres, mssql, mysql, sqlite)"
 
 [dependencies]
 async-trait = "0.1"
-bb8 = { version="0.9", optional=true }
-bb8-tiberius = { version="0.16", optional=true }
-tiberius = { version = "0.12", features = ["tokio"], optional = true }
-futures = {version= "0.3", optional=true }
-futures-core = {version= "0.3", optional=true }
-futures-util = { version= "0.3", optional=true }
+bb8 = { version = "0.9", optional = true }
+bb8-tiberius = { version = "0.16", optional = true }
+futures = { version = "0.3", optional = true }
+futures-core = { version = "0.3", optional = true }
+futures-util = { version = "0.3", optional = true }
 log = "0.4"
 sqlx = { version = "0.8", features = [], optional = true }
 tracing = { version = "0.1", optional = true }
@@ -44,8 +52,22 @@ tokio = { version = "1", features = [], optional = true }
 tokio-util = { version = "0.7", features = ["full"], optional = true }
 async-mutex = { version = "1.4", optional = true }
 
+# macOS uses rustls
+[target.'cfg(target_os = "macos")'.dependencies.tiberius]
+version = "0.12"
+default-features = false
+features = ["tokio", "rustls"]
+optional = true
+
+# all other OSes use native-tls
+[target.'cfg(not(target_os = "macos"))'.dependencies.tiberius]
+version = "0.12"
+default-features = false
+features = ["tokio", "native-tls"]
+optional = true
+
 [dev-dependencies]
-welds-connections = { path="./", features = ["full"] }
+welds-connections = { path = "./", features = ["full"] }
 sqlx = { version = "0.8", features = ["runtime-tokio"] }
 tokio = { version = "1", features = ["full"] }
 pretty_env_logger = "0.5"
