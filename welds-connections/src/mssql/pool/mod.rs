@@ -99,6 +99,7 @@ impl Pool {
     }
 
     /// returns a string displaying the status of each Slot in the pool
+    #[allow(dead_code)]
     pub async fn status(&self) -> String {
         let mut display = Vec::with_capacity(self.slots.len() + 2);
         display.push('[');

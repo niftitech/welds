@@ -78,11 +78,13 @@ impl ClauseAdder for LogicalClause {
 }
 
 /// Extensions on ClauseAdder to add builder style (and/or) methods
+#[cfg(feature = "unstable-api")]
 pub trait ClauseAdderAndOrExt {
     fn and(self: Box<Self>, other: Box<dyn ClauseAdder>) -> Box<dyn ClauseAdder>;
     fn or(self: Box<Self>, other: Box<dyn ClauseAdder>) -> Box<dyn ClauseAdder>;
 }
 
+#[cfg(feature = "unstable-api")]
 impl<CA> ClauseAdderAndOrExt for CA
 where
     CA: ClauseAdder + 'static,

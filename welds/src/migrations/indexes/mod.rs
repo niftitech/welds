@@ -105,8 +105,8 @@ impl MigrationWriter for CreateIndexWithTableColumn {
         let cw = ColumnWriter::new(syntax);
         let cols: Vec<String> = self.columns.iter().map(|c| cw.excape(c)).collect();
         let cols: String = cols.join(",");
-        let includes: Vec<String> = self.includes.iter().map(|c| cw.excape(c)).collect();
-        let includes: String = includes.join(",");
+        // let includes: Vec<String> = self.includes.iter().map(|c| cw.excape(c)).collect();
+        // let includes: String = includes.join(",");
         let name = self.index_name();
 
         let mut parts: Vec<&str> = Vec::default();
