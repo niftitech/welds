@@ -1,4 +1,5 @@
 use crate::WeldsModel;
+use crate::query::builder::ManualParam;
 use welds_connections::Syntax;
 
 #[derive(Debug, Default, WeldsModel)]
@@ -21,6 +22,15 @@ struct OrderC {
     #[welds(rename = "product_id")]
     pub prod_id: i32,
     pub price: i32,
+}
+
+#[test]
+fn where_manual2_nonstatic_accepts_runtime_sql() {
+    let col = "id".to_string();
+    let sql = format!("$.{} > ?", col);
+    let q = ProductC::all().where_manual2_nonstatic(&sql, ManualParam::new().push(1));
+    let generated = q.to_sql(Syntax::Sqlite);
+    assert!(generated.contains("id > ?"));
 }
 
 #[test]

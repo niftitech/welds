@@ -321,8 +321,19 @@ where
 
     /// Manually write the order by part of the query.
     /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
-    pub fn order_manual(mut self, sql: &'static str) -> Self {
-        self.qb = self.qb.order_manual(sql);
+    pub fn order_manual(self, sql: &'static str) -> Self {
+        self.order_manual_nonstatic(sql)
+    }
+
+    /// Manually write the order by part of the query.
+    ///
+    /// SQL template may be built at runtime. Caller must ensure identifiers (e.g. column names)
+    /// are whitelist-validated and all user-supplied values are bound via `?` and `ManualParam`.
+    /// This does not relax parameter binding requirements.
+    ///
+    /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
+    pub fn order_manual_nonstatic(mut self, sql: &str) -> Self {
+        self.qb = self.qb.order_manual_nonstatic(sql);
         self
     }
 
