@@ -12,6 +12,7 @@ use crate::writers::insert::{ColArg, InsertWriter};
 use welds_connections::Client;
 use welds_connections::Fetch;
 
+#[maybe_async::maybe_async]
 pub async fn insert_one<T>(obj: &mut T, client: &dyn Client) -> Result<()>
 where
     T: WriteToArgs + HasSchema + ColumnDefaultCheck,
@@ -32,7 +33,7 @@ where
     let parts = <<T as HasSchema>::Schema>::identifier();
     let identifier = TableWriter::new(syntax).write2(parts);
 
-    let columns = <<T as HasSchema>::Schema as TableColumns>::writable_columns();
+    let columns = <<T as HasSchema>::Schema as TableColumns>::insert_columns();
     let pks = <<T as HasSchema>::Schema as TableColumns>::primary_keys();
 
     let mut colargs = Vec::default();
@@ -55,10 +56,13 @@ where
                 // If it is NOT the default value we need to include
                 // it in the query for insertion
                 if !obj.col_is_default(col.name())? {
+                    log::trace!("col: {} is not default, using in insert", col.name());
                     id_return_required = false;
                     obj.bind(col.name(), &mut args)?;
                     let col = col_writer.excape(col.name());
                     colargs.push(ColArg(col, next_params.next()));
+                } else {
+                    log::trace!("col: {} is default, not used for insert", col.name());
                 }
             }
         }
@@ -74,6 +78,12 @@ where
     // If this insert needs a second select command to get the id, add it to the vec of sql to run
     let sql2: String;
     if id_return_required {
+        // If the user is expecting the DB to return the DB generated ID,
+        // and there is more than one, we can't continue.
+        if pks.len() >= 2 {
+            return Err(crate::errors::WeldsError::InsertFailed("Unable to insert record with multiple PKs where IDs are expected to be returned from database. To insert a record with multiple PKs they must both be provided.".to_owned()));
+        }
+
         if let Some(select) = select {
             sql2 = select.to_owned();
             statements.push(Fetch {

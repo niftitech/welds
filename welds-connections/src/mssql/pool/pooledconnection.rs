@@ -7,6 +7,7 @@ use crate::errors::Result;
 use crate::row::Row;
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
+#[cfg(feature = "unstable-api")]
 use futures::StreamExt;
 use std::sync::mpsc::Sender;
 use tiberius::ToSql;

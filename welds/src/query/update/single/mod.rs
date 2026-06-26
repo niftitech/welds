@@ -7,6 +7,7 @@ use crate::writers::NextParam;
 use crate::writers::TableWriter;
 use welds_connections::Client;
 
+#[maybe_async::maybe_async]
 pub async fn update_one<T>(obj: &mut T, client: &dyn Client) -> Result<()>
 where
     T: WriteToArgs + HasSchema,
@@ -24,7 +25,7 @@ where
     let parts = <<T as HasSchema>::Schema>::identifier();
     let identifier = TableWriter::new(syntax).write2(parts);
 
-    let columns = <<T as HasSchema>::Schema as TableColumns>::writable_columns();
+    let columns = <<T as HasSchema>::Schema as TableColumns>::update_columns();
     let pks = <<T as HasSchema>::Schema as TableColumns>::primary_keys();
     if pks.is_empty() {
         return Err(WeldsError::NoPrimaryKey);

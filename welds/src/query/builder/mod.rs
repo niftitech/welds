@@ -141,6 +141,27 @@ where
     /// ```
     ///
     pub fn where_manual<V, FN>(
+        self,
+        col: impl Fn(<T as HasSchema>::Schema) -> FN,
+        sql: &str,
+        params: impl Into<ManualParam>,
+    ) -> Self
+    where
+        FN: AsFieldName<V>,
+    {
+        self.where_manual_nonstatic(col, sql, params)
+    }
+
+    /// write custom sql for the right side of a clause in a where block
+    ///
+    /// SQL template may be built at runtime. Caller must ensure identifiers (e.g. column names)
+    /// are whitelist-validated and all user-supplied values are bound via `?` and `ManualParam`.
+    /// This does not relax parameter binding requirements.
+    ///
+    /// NOTE: use '?' for params. They will be swapped out for the correct Syntax
+    ///
+    /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
+    pub fn where_manual_nonstatic<V, FN>(
         mut self,
         col: impl Fn(<T as HasSchema>::Schema) -> FN,
         sql: &str,
@@ -150,7 +171,7 @@ where
         FN: AsFieldName<V>,
     {
         let field = col(Default::default());
-        let colname = field.colname().to_string();
+        let colname = field.colname();
         let params: ManualParam = params.into();
         let c = clause::ClauseColManual {
             col: Some(colname),
@@ -190,7 +211,20 @@ where
     /// }
     /// ```
     ///
-    pub fn where_manual2(mut self, sql: &str, params: impl Into<ManualParam>) -> Self {
+    pub fn where_manual2(self, sql: &'static str, params: impl Into<ManualParam>) -> Self {
+        self.where_manual2_nonstatic(sql, params)
+    }
+
+    /// write custom sql for a clause in a where block
+    ///
+    /// SQL template may be built at runtime. Caller must ensure identifiers (e.g. column names)
+    /// are whitelist-validated and all user-supplied values are bound via `?` and `ManualParam`.
+    /// This does not relax parameter binding requirements.
+    ///
+    /// NOTE: use '?' for params. They will be swapped out for the correct Syntax
+    ///
+    /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
+    pub fn where_manual2_nonstatic(mut self, sql: &str, params: impl Into<ManualParam>) -> Self {
         let params: ManualParam = params.into();
         let c = clause::ClauseColManual {
             col: None,
@@ -210,17 +244,17 @@ where
     ) -> Self
     where
         T: HasRelations,
-        Ship: Relationship<R>,
+        Ship: Relationship<T, R>,
         R: HasSchema,
         R: Send + Sync + HasSchema,
-        <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
-        <T as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
+        <R as HasSchema>::Schema: TableInfo + TableColumns,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
         <T as HasRelations>::Relation: Default,
     {
         let ship = relationship(Default::default());
-        let out_col = ship.my_key::<R::Schema, T::Schema>();
+        let out_col = ship.my_key();
         let inner_tn = <R as HasSchema>::Schema::identifier();
-        let inner_col = ship.their_key::<R::Schema, T::Schema>();
+        let inner_col = ship.their_key();
         let mut exist_in = ExistIn::new(&filter, out_col, inner_tn, inner_col);
         exist_in.set_aliases(&self.alias_asigner);
         self.exist_ins.push(exist_in);
@@ -234,20 +268,20 @@ where
     ) -> QueryBuilder<R>
     where
         T: HasRelations,
-        Ship: Relationship<R>,
+        Ship: Relationship<T, R>,
         T: HasSchema,
         R: Send + Sync + HasSchema,
-        <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
-        <T as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
+        <R as HasSchema>::Schema: TableInfo + TableColumns,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
         <T as HasRelations>::Relation: Default,
     {
         let ship = relationship(Default::default());
         let mut qb: QueryBuilder<R> = QueryBuilder::new();
         qb.set_aliases(&self.alias_asigner);
 
-        let out_col = ship.their_key::<R::Schema, T::Schema>();
+        let out_col = ship.their_key();
         let inner_tn = <T as HasSchema>::Schema::identifier();
-        let inner_col = ship.my_key::<R::Schema, T::Schema>();
+        let inner_col = ship.my_key();
         let exist_in = ExistIn::new(self, out_col, inner_tn, inner_col);
 
         qb.exist_ins.push(exist_in);
@@ -334,7 +368,18 @@ where
 
     /// Manually write the order by part of the query
     /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
-    pub fn order_manual(mut self, sql: &str) -> Self {
+    pub fn order_manual(self, sql: &'static str) -> Self {
+        self.order_manual_nonstatic(sql)
+    }
+
+    /// Manually write the order by part of the query
+    ///
+    /// SQL template may be built at runtime. Caller must ensure identifiers (e.g. column names)
+    /// are whitelist-validated and all user-supplied values are bound via `?` and `ManualParam`.
+    /// This does not relax parameter binding requirements.
+    ///
+    /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
+    pub fn order_manual_nonstatic(mut self, sql: &str) -> Self {
         self.orderby.push(OrderBy::new_manual(sql.to_string(), ""));
         self
     }
@@ -393,6 +438,22 @@ where
         as_name: &'static str,
     ) -> SelectBuilder<T> {
         SelectBuilder::new(self).select_min(lam, as_name)
+    }
+
+    pub fn select_avg<V, FN: AsFieldName<V>>(
+        self,
+        lam: impl Fn(<T as HasSchema>::Schema) -> FN,
+        as_name: &'static str,
+    ) -> SelectBuilder<T> {
+        SelectBuilder::new(self).select_avg(lam, as_name)
+    }
+
+    pub fn select_sum<V, FN: AsFieldName<V>>(
+        self,
+        lam: impl Fn(<T as HasSchema>::Schema) -> FN,
+        as_name: &'static str,
+    ) -> SelectBuilder<T> {
+        SelectBuilder::new(self).select_sum(lam, as_name)
     }
 
     /// Changes this query Into a sql UPDATE.
@@ -518,7 +579,7 @@ where
     ) -> IncludeBuilder<T>
     where
         T: 'static + HasRelations,
-        Ship: 'static + Sync + Relationship<R>,
+        Ship: 'static + Sync + Relationship<T, R>,
         R: HasSchema,
         R: 'static,
         R: Send + Sync + HasSchema,
@@ -543,7 +604,7 @@ where
     ) -> IncludeBuilder<T>
     where
         T: 'static + HasRelations,
-        Ship: 'static + Sync + Relationship<R>,
+        Ship: 'static + Sync + Relationship<T, R>,
         R: HasSchema,
         R: 'static,
         R: Send + Sync + HasSchema,

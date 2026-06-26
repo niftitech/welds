@@ -20,6 +20,10 @@ jobs:
           - ./tests/mysql
           - ./tests/postgres
           - ./tests/sqlite
+          - ./tests/sqlite_sync
+          - ./welds
+          - ./welds-connections
+          - ./welds-macros
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4

@@ -10,9 +10,9 @@ use sqlx::sqlite::SqliteArguments;
 use sqlx::{Sqlite, SqlitePool};
 use std::sync::Arc;
 
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use crate::StreamClient;
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use futures_core::stream::BoxStream;
 
 #[derive(Clone)]
@@ -57,7 +57,7 @@ use sqlx::types::Type;
 impl Client for SqliteClient {
     async fn execute(&self, sql: &str, params: &[&(dyn Param + Sync)]) -> Result<ExecuteResult> {
         log::trace!("SQLITE EXECUTE: {}", sql);
-        let mut query = sqlx::query::<Sqlite>(sql);
+        let mut query = sqlx::query::<Sqlite>(sqlx::AssertSqlSafe(sql));
         for param in params {
             query = SqliteParam::add_param(*param, query);
         }
@@ -69,7 +69,7 @@ impl Client for SqliteClient {
 
     async fn fetch_rows(&self, sql: &str, params: &[&(dyn Param + Sync)]) -> Result<Vec<Row>> {
         log::trace!("SQLITE FETCH_ROWS: {}", sql);
-        let mut query = sqlx::query::<Sqlite>(sql);
+        let mut query = sqlx::query::<Sqlite>(sqlx::AssertSqlSafe(sql));
         for param in params {
             query = SqliteParam::add_param(*param, query);
         }
@@ -88,7 +88,7 @@ impl Client for SqliteClient {
             let sql = fetch.sql;
             log::trace!("SQLITE FETCH_MANY: {}", sql);
             let params = fetch.params;
-            let mut query = sqlx::query::<Sqlite>(sql);
+            let mut query = sqlx::query::<Sqlite>(sqlx::AssertSqlSafe(sql));
             for param in params {
                 query = SqliteParam::add_param(*param, query);
             }
@@ -104,7 +104,7 @@ impl Client for SqliteClient {
     }
 }
 
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 #[async_trait]
 impl StreamClient for SqliteClient {
     /// Run the SQL streaming the results back in a future::stream
@@ -128,8 +128,8 @@ mod row_stream;
 pub trait SqliteParam {
     fn add_param<'q>(
         &'q self,
-        query: Query<'q, Sqlite, SqliteArguments<'q>>,
-    ) -> Query<'q, Sqlite, SqliteArguments<'q>>;
+        query: Query<'q, Sqlite, SqliteArguments>,
+    ) -> Query<'q, Sqlite, SqliteArguments>;
 }
 
 impl<T> SqliteParam for T
@@ -139,8 +139,8 @@ where
 {
     fn add_param<'q>(
         &'q self,
-        query: Query<'q, Sqlite, SqliteArguments<'q>>,
-    ) -> Query<'q, Sqlite, SqliteArguments<'q>> {
+        query: Query<'q, Sqlite, SqliteArguments>,
+    ) -> Query<'q, Sqlite, SqliteArguments> {
         query.bind(self)
     }
 }

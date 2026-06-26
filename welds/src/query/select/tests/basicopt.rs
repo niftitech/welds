@@ -10,7 +10,7 @@ use crate::query::clause::BasicOpt;
 //
 
 // model with option
-
+#[allow(dead_code)]
 struct Product2 {
     pub name: Option<String>,
 }
@@ -42,10 +42,13 @@ impl TableInfo for Product2Schema {
 
 impl TableColumns for Product2Schema {
     type ColumnStruct = Self;
-    fn readable_columns() -> Vec<Column> {
+    fn select_columns() -> Vec<Column> {
         vec![Column::new("dbname", "String", true)]
     }
-    fn writable_columns() -> Vec<Column> {
+    fn update_columns() -> Vec<Column> {
+        vec![Column::new("dbname", "String", true)]
+    }
+    fn insert_columns() -> Vec<Column> {
         vec![Column::new("dbname", "String", true)]
     }
     fn primary_keys() -> Vec<Column> {
@@ -67,7 +70,7 @@ fn should_exec_basicopt_with_where_with_value() {
         q.run(&client).await.unwrap();
         let ran_sql = client.last_sql().unwrap();
         let expected =
-            "SELECT t1.\"dbname\" FROM da_schemaname.da_tablename t1 WHERE ( t1.dbname = @p1 )";
+            "SELECT t1.\"dbname\" FROM da_schemaname.da_tablename t1 WHERE ( t1.\"dbname\" = @p1 )";
         assert_eq!(expected, &ran_sql);
     });
 }
@@ -79,8 +82,7 @@ fn should_exec_basicopt_with_where_with_none() {
         let client = welds_connections::noop::build(Syntax::Mssql);
         q.run(&client).await.unwrap();
         let ran_sql = client.last_sql().unwrap();
-        let expected =
-            "SELECT t1.\"dbname\" FROM da_schemaname.da_tablename t1 WHERE ( t1.dbname IS NULL )";
+        let expected = "SELECT t1.\"dbname\" FROM da_schemaname.da_tablename t1 WHERE ( t1.\"dbname\" IS NULL )";
         assert_eq!(expected, &ran_sql);
     });
 }
@@ -94,7 +96,7 @@ fn should_exec_basicopt_with_where_with_some() {
         q.run(&client).await.unwrap();
         let ran_sql = client.last_sql().unwrap();
         let expected =
-            "SELECT t1.\"dbname\" FROM da_schemaname.da_tablename t1 WHERE ( t1.dbname = @p1 )";
+            "SELECT t1.\"dbname\" FROM da_schemaname.da_tablename t1 WHERE ( t1.\"dbname\" = @p1 )";
         assert_eq!(expected, &ran_sql);
     });
 }

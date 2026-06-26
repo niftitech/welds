@@ -13,6 +13,7 @@ pub use issue::*;
 /// and what the welds object was compiled against
 ///
 /// Used to known if there are going to be issues when running the query of a model
+#[maybe_async::maybe_async]
 pub async fn schema<T>(client: &dyn Client) -> Result<Vec<Issue>>
 where
     T: Send + HasSchema,
@@ -33,7 +34,7 @@ where
     };
 
     let table_cols = tabledef.columns();
-    let model_cols = <T::Schema>::readable_columns();
+    let model_cols = <T::Schema>::select_columns();
     let pairs = get_pairs(client.syntax());
 
     struct_added(table_cols, &model_cols)

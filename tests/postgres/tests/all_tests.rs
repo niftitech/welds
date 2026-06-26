@@ -735,6 +735,20 @@ fn should_be_able_to_filter_by_multiple_values() {
 }
 
 #[test]
+fn should_be_able_to_filter_by_multiple_values_negated() {
+    async_std::task::block_on(async {
+        let conn = get_conn().await;
+        let total = Product::all().count(&conn).await.unwrap() as usize;
+        let query = Product::all().where_col(|p| p.product_id.not_in_list(&[2, 3, 4]));
+        let results = query.run(&conn).await.unwrap();
+        assert_eq!(results.len(), total - 3);
+        let query = Product::all().where_col(|p| p.name.not_in_list(&["cat", "dog"]));
+        let results = query.run(&conn).await.unwrap();
+        assert_eq!(results.len(), total - 2);
+    })
+}
+
+#[test]
 fn should_be_able_to_select_all_products_with_there_orders() {
     async_std::task::block_on(async {
         let conn = get_conn().await;
@@ -784,5 +798,77 @@ fn should_be_able_to_select_all_orders_with_there_products() {
         let o3_products = o3.get(|x| x.product);
         assert_eq!(o3_products.len(), 1);
         assert_eq!(o3_products[0].product_id, 1);
+    })
+}
+
+#[test]
+fn should_be_able_to_select_hourse_or_dog() {
+    async_std::task::block_on(async {
+        use welds::query::clause::or;
+        let conn = get_conn().await;
+        use postgres_test::models::product::ProductSchema;
+
+        // verify pulling out lambda into variable
+        let clause = |x: ProductSchema| or(x.name.like("horse"), x.name.like("dog"));
+        let q = Product::all().where_col(clause);
+
+        eprintln!("SQL: {}", q.to_sql(Syntax::Postgres));
+        let data = q.run(&conn).await.unwrap();
+        assert_eq!(data.len(), 2, "Expected horse and dog",);
+
+        // verify inline clause
+        let q2 = Product::all().where_col(|x| or(x.name.like("horse"), x.name.like("dog")));
+        eprintln!("SQL: {}", q2.to_sql(Syntax::Postgres));
+        let data = q2.run(&conn).await.unwrap();
+        assert_eq!(data.len(), 2, "Expected horse and dog",);
+    })
+}
+
+#[test]
+fn should_be_able_to_find_all_not_horses() {
+    async_std::task::block_on(async {
+        use welds::query::clause::not;
+        let conn = get_conn().await;
+        // get expected count for non-horse
+        let total = Product::all().count(&conn).await.unwrap();
+        let horses = Product::where_col(|x| x.name.like("horse"))
+            .count(&conn)
+            .await
+            .unwrap();
+        // for this test to be valid we want to make sure there are horses,
+        // and there are non-horses
+        assert!(horses > 0);
+        assert!(horses != total);
+        // get not-horse count
+        let q = Product::where_col(|x| not(x.name.like("horse")));
+        let not_horse_count = q.count(&conn).await.unwrap();
+        // verify not-horse count is total of everything not a horse
+        assert_eq!(total - horses, not_horse_count);
+    })
+}
+
+#[test]
+fn should_be_able_to_crud_bad_column_names() {
+    async_std::task::block_on(async {
+        use postgres_test::models::BadColumnNames;
+
+        let conn = get_conn().await;
+        let trans = conn.begin().await.unwrap();
+        let mut o = BadColumnNames::new();
+        o.camel_case = "test".to_owned();
+        // insert
+        o.save(&trans).await.unwrap();
+        // update
+        o.camel_case = "test2".to_owned();
+        o.save(&trans).await.unwrap();
+        // select
+        let mut obj = BadColumnNames::where_col(|x| x.camel_case.equal("test2"))
+            .run(&trans)
+            .await
+            .unwrap();
+        // delete
+        let mut obj = obj.pop().unwrap();
+        obj.delete(&trans).await.unwrap();
+        trans.rollback().await.unwrap();
     })
 }

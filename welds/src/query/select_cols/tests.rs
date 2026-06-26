@@ -32,6 +32,15 @@ fn should_be_able_to_select_as() {
 }
 
 #[test]
+fn should_be_able_to_select_distinct() {
+    futures::executor::block_on(async move {
+        let q = Product::all().select(|x| x.name).distinct();
+        let sql = q.to_sql(Syntax::Postgres);
+        assert_eq!(sql, "SELECT DISTINCT t1.\"name\" FROM products t1");
+    });
+}
+
+#[test]
 fn should_be_able_to_select_both_sets_of_ids() {
     futures::executor::block_on(async move {
         let q = Product::all()
@@ -55,7 +64,7 @@ fn should_be_able_to_select_join_with_order_by() {
         let sql = q.to_sql(Syntax::Postgres);
         assert_eq!(
             sql,
-            "SELECT t1.\"id\", t2.\"price\" FROM products t1 JOIN orders t2 ON t1.\"id\" = t2.\"product_id\" ORDER BY t1.id ASC"
+            "SELECT t1.\"id\", t2.\"price\" FROM products t1 JOIN orders t2 ON t1.\"id\" = t2.\"product_id\" ORDER BY t1.\"id\" ASC"
         );
     });
 }

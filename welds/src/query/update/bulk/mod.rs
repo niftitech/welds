@@ -27,6 +27,7 @@ pub struct UpdateBuilder<T> {
     pub(crate) sets: Vec<Arc<Box<dyn AssignmentAdder>>>,
 }
 
+#[maybe_async::maybe_async]
 impl<T> UpdateBuilder<T>
 where
     T: Send + HasSchema,
@@ -168,7 +169,7 @@ where
     {
         let params: ManualParam = params.into();
         let field = lam(Default::default());
-        let col_raw = field.colname().to_string();
+        let col_raw = field.colname();
 
         let adder = AssignmentManual {
             col: col_raw,

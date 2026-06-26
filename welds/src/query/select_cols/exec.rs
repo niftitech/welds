@@ -16,6 +16,7 @@ use welds_connections::trace;
 // This file contains all the stuff added onto the SelectBuilder to allow it to run SELECTs
 // ******************************************************************************************
 
+#[maybe_async::maybe_async]
 impl<T> SelectBuilder<T>
 where
     T: Send + HasSchema,
@@ -47,7 +48,7 @@ where
         let select_renders = build_select_renders(self);
 
         join_sql_parts(&[
-            build_head_select(syntax, &select_renders, self),
+            build_head_select(syntax, self.distinct, &select_renders, self),
             build_joins(syntax, self),
             where_sql,
             build_group_by(syntax, &select_renders, self),
@@ -79,6 +80,53 @@ where
         Ok(rows)
     }
 
+    /// Executes the Query returning the first Row
+    /// Returns an Error if row is not found
+    #[cfg(feature = "unstable-api")]
+    pub async fn fetch_one<'q, 'c, Ch>(&self, client: &'c dyn Client) -> Result<Ch>
+    where
+        'q: 'c,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
+        Ch: Send + HasSchema,
+        <Ch as HasSchema>::Schema: TableInfo + TableColumns,
+        Ch: TryFrom<Row>,
+        WeldsError: From<<Ch as TryFrom<Row>>::Error>,
+    {
+        let query: Self = self.clone().limit(1);
+        let row = query
+            .run(client)
+            .await?
+            .into_iter()
+            .nth(0)
+            .ok_or(WeldsError::RowNotFound)?;
+        let obj: Ch = row.try_into()?;
+        Ok(obj)
+    }
+
+    /// A short hand to fetch a single row or None from the database.
+    /// The limit is automatically applied to one.
+    #[cfg(feature = "unstable-api")]
+    pub async fn fetch_one_optional<'q, 'c, Ch>(&self, client: &'c dyn Client) -> Result<Option<Ch>>
+    where
+        'q: 'c,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
+        Ch: Send + HasSchema,
+        <Ch as HasSchema>::Schema: TableInfo + TableColumns,
+        Ch: TryFrom<Row>,
+        WeldsError: From<<Ch as TryFrom<Row>>::Error>,
+    {
+        let query: Self = self.clone().limit(1);
+        let mut rows = query.run(client).await?;
+        let row = rows.pop();
+        match row {
+            Some(r) => {
+                let obj: Ch = r.try_into()?;
+                Ok(Some(obj))
+            }
+            None => Ok(None),
+        }
+    }
+
     fn validate_group_by(&self) -> Result<()> {
         if self.requires_group_by() && self.group_bys.is_empty() {
             return Err(WeldsError::ColumnMissingFromGroupBy);
@@ -95,6 +143,7 @@ where
 /// write the head of of the select statement
 fn build_head_select<T>(
     syntax: Syntax,
+    distinct: bool,
     columns: &[SelectRender],
     sb: &SelectBuilder<T>,
 ) -> Option<String>
@@ -104,6 +153,10 @@ where
 {
     let mut head: Vec<&str> = Vec::default();
     head.push("SELECT");
+
+    if distinct {
+        head.push("DISTINCT");
+    }
 
     let mut cols_text_parts: Vec<_> = Vec::default();
     for col in columns {

@@ -1,7 +1,7 @@
 [package]
 name = "welds"
 authors = ["Lex Childs <lexchilds@gmail.com>"]
-version = "0.4.19"
+version = "0.5.0"
 edition = "2024"
 license = "BSD-3-Clause"
 categories = ["database"]
@@ -11,14 +11,16 @@ repository = "https://github.com/weldsorm/welds"
 description = "An async ORM for (postgres, mssql, mysql, sqlite)"
 
 [dependencies]
-welds-connections = { path="../welds-connections", version = "^0.4.19" }
+welds-connections = { path="../welds-connections", version = "^0.5.0" }
 futures = {version= "0.3", optional = true  }
 futures-core = {version= "0.3", optional=true }
 async-trait = "0.1"
 colored = { version="3", optional = true }
 anyhow = "1.0"
 thiserror = "2.0"
-welds-macros = { path="../welds-macros", version = "^0.4.19" }
+welds-macros = { path="../welds-macros", version = "^0.5.0" }
+maybe-async = "0.2"
+log = "0.4"
 
 [features]
 "default" = []
@@ -26,7 +28,10 @@ welds-macros = { path="../welds-macros", version = "^0.4.19" }
 "mysql" = ["welds-connections/mysql"]
 "mssql" = ["welds-connections/mssql"]
 "sqlite" = ["welds-connections/sqlite"]
+"sqlite-sync" = ["__sync", "welds-connections/sqlite-sync"]
+"sqlite-sync-bundled" = ["sqlite-sync", "welds-connections/sqlite-sync-bundled"]
 "full" = ["postgres", "mysql", "mssql", "sqlite", "check", "detect", "migrations", "unstable-api"]
+"full-sync" = ["sqlite-sync", "check", "detect", "migrations"]
 "detect" = []
 "mock" = []
 "check" = ["detect", "colored"]
@@ -34,6 +39,8 @@ welds-macros = { path="../welds-macros", version = "^0.4.19" }
 "unstable-api" = ["welds-connections/unstable-api", "futures", "futures-core"]
 "tracing" = ["welds-connections/tracing"]
 
+# Internal feature for enabling sync compilation
+"__sync" = ["maybe-async/is_sync", "welds-macros/__sync", "welds-connections/__sync"]
 
 #[profile.dev.package.sqlx-macros]
 #opt-level = 3
@@ -42,13 +49,14 @@ welds-macros = { path="../welds-macros", version = "^0.4.19" }
 [dev-dependencies]
 welds = { path="./", features=["full", "mock", "unstable-api"] }
 futures = {version= "0.3" }
-welds-connections = { path="../welds-connections", version = "^0.4.19", features=["full"] }
-welds-macros = { path="../welds-macros", version = "^0.4.19" }
+welds-connections = { path="../welds-connections", version = "^0.5.0", features=["full"] }
+welds-macros = { path="../welds-macros", version = "^0.5.0" }
 # used for the examples
-sqlx = { version = "0.8", features = [ "runtime-async-std", "tls-rustls", "macros"] }
+sqlx = { version = "0.9", features = [ "runtime-async-std", "tls-rustls", "macros"] }
 async-std = { version = "1", features = ["attributes"] }
 pretty_env_logger = "0.5"
 
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["full", "unstable-api"]
+#all-features = true

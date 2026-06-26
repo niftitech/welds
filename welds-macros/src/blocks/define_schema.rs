@@ -10,19 +10,20 @@ pub(crate) fn write(info: &Info) -> TokenStream {
     let fields: Vec<_> = info
         .columns
         .iter()
-        .filter(|x| !x.ignore)
+        .filter(|x| x.selectable || x.updateable || x.insertable)
         .map(|x| def_field(info, x))
         .collect();
 
     let default_fields: Vec<_> = info
         .columns
         .iter()
-        .filter(|x| !x.ignore)
+        .filter(|x| x.selectable || x.updateable || x.insertable)
         .map(|x| default_fields(info, x))
         .collect();
 
     quote! {
 
+        #[derive(Copy,Clone)]
         pub struct #name {
             #(#fields),*
         }
@@ -75,6 +76,7 @@ mod tests {
         let code = ts.to_string();
 
         let expected: &str = r#"
+            #[derive(Copy,Clone)]
             pub struct MockSchema {
                 pub id: welds::query::clause::Numeric<i64>
             }

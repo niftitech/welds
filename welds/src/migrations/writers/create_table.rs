@@ -1,10 +1,11 @@
-use super::create_index;
+use super::create_indexes::{write as create_index, write_inline_fk};
 use crate::Syntax;
 use crate::detect::TableDef;
 use crate::migrations::create_table::ColumnBuilder;
 use crate::migrations::create_table::IdBuilder;
 use crate::migrations::create_table::TableBuilder;
 use crate::migrations::types::Type;
+use crate::writers::ColumnWriter;
 use crate::writers::TableWriter;
 use crate::writers::types::pk_override;
 
@@ -35,7 +36,7 @@ pub fn from_def(syntax: Syntax, def: &TableDef) -> Vec<String> {
         columns.push(build_column(syntax, &col))
     }
 
-    let tablename = TableWriter::new(syntax).write(&def.ident());
+    let tablename = TableWriter::new(syntax).write(def.ident());
 
     let parts = vec![format!(
         "CREATE TABLE {} ( {} )",
@@ -46,7 +47,16 @@ pub fn from_def(syntax: Syntax, def: &TableDef) -> Vec<String> {
 }
 
 pub fn from_builder(syntax: Syntax, tb: &TableBuilder) -> Vec<String> {
-    let columns: Vec<String> = build_columns(syntax, &tb.pk, &tb.columns);
+    let mut columns: Vec<String> = build_columns(syntax, &tb.pk, &tb.columns);
+
+    // some FK indexs need to be made inline with the Table.
+    let mut inline_indexes: Vec<String> = tb
+        .columns
+        .iter()
+        .filter_map(|c| write_inline_fk(syntax, c))
+        .collect();
+    columns.append(&mut inline_indexes);
+
     let columns: String = columns.join(", ");
     let tablename = TableWriter::new(syntax).write(&tb.ident);
     let mut parts = vec![format!("CREATE TABLE {} ( {} )", tablename, columns)];
@@ -67,7 +77,7 @@ fn build_columns(syntax: Syntax, idcol: &IdBuilder, cols: &[ColumnBuilder]) -> V
 }
 
 fn build_id_column(syntax: Syntax, col: &IdBuilder) -> String {
-    let name = &col.name;
+    let name = ColumnWriter::new(syntax).excape(&col.name);
     let ty: String = col.ty.db_id_type(syntax);
     let mut tail = "PRIMARY KEY";
     if col.ty == Type::Int || col.ty == Type::IntSmall || col.ty == Type::IntBig {
@@ -82,7 +92,7 @@ fn build_id_column(syntax: Syntax, col: &IdBuilder) -> String {
 }
 
 fn build_column(syntax: Syntax, col: &ColumnBuilder) -> String {
-    let name = &col.name;
+    let name = ColumnWriter::new(syntax).excape(col.name.as_str());
     let ty: String = col.ty.db_type(syntax);
 
     let null = if col.nullable { "NULL" } else { "NOT NULL" };

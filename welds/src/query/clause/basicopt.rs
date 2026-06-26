@@ -4,20 +4,22 @@ use crate::query::optional::Optional;
 use std::marker::PhantomData;
 use welds_connections::Param;
 
+#[derive(Clone)]
 pub struct BasicOpt<T> {
-    col: String,
-    field: String,
+    col: &'static str,
+    field: &'static str,
     _t: PhantomData<T>,
 }
 
 impl<T> AsFieldName<T> for BasicOpt<T> {
-    fn colname(&self) -> &str {
-        self.col.as_str()
+    fn colname(&self) -> &'static str {
+        self.col
     }
-    fn fieldname(&self) -> &str {
-        self.field.as_str()
+    fn fieldname(&self) -> &'static str {
+        self.field
     }
 }
+impl<T: Clone> Copy for BasicOpt<T> {}
 
 impl<T> AsOptField for BasicOpt<T> {}
 
@@ -25,7 +27,7 @@ impl<T> BasicOpt<T>
 where
     T: 'static + Clone + Send + Sync,
 {
-    pub fn new(col: impl Into<String>, field: impl Into<String>) -> Self {
+    pub fn new(col: &'static str, field: &'static str) -> Self {
         Self {
             col: col.into(),
             field: field.into(),
@@ -80,6 +82,24 @@ where
         let c = ClauseColValIn::<T> {
             col: self.col,
             operator: "IN",
+            list,
+        };
+        Box::new(c)
+    }
+
+    /// Will write SQL "NOT IN ()" to check that the value is not in a list
+    pub fn not_in_list<P>(self, slice: &[P]) -> Box<ClauseColValIn<T>>
+    where
+        P: Into<T> + Clone,
+        T: Param,
+    {
+        let mut list = Vec::default();
+        for param in slice {
+            list.push(param.clone().into());
+        }
+        let c = ClauseColValIn::<T> {
+            col: self.col,
+            operator: "NOT IN",
             list,
         };
         Box::new(c)

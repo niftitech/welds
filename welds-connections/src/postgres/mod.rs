@@ -10,9 +10,9 @@ use sqlx::query::Query;
 use sqlx::{PgPool, Postgres};
 use std::sync::Arc;
 
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use crate::StreamClient;
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use futures_core::stream::BoxStream;
 
 #[derive(Debug, Clone)]
@@ -57,7 +57,7 @@ use sqlx::types::Type;
 impl Client for PostgresClient {
     async fn execute(&self, sql: &str, params: &[&(dyn Param + Sync)]) -> Result<ExecuteResult> {
         log::trace!("POSTGRES EXECUTE: {}", sql);
-        let mut query = sqlx::query::<Postgres>(sql);
+        let mut query = sqlx::query::<Postgres>(sqlx::AssertSqlSafe(sql));
         for param in params {
             query = PostgresParam::add_param(*param, query);
         }
@@ -69,7 +69,7 @@ impl Client for PostgresClient {
 
     async fn fetch_rows(&self, sql: &str, params: &[&(dyn Param + Sync)]) -> Result<Vec<Row>> {
         log::trace!("POSTGRES FETCH_ROWS: {}", sql);
-        let mut query = sqlx::query::<Postgres>(sql);
+        let mut query = sqlx::query::<Postgres>(sqlx::AssertSqlSafe(sql));
         for param in params {
             query = PostgresParam::add_param(*param, query);
         }
@@ -88,7 +88,7 @@ impl Client for PostgresClient {
             let sql = fetch.sql;
             log::trace!("POSTGRES FETCH_MANY: {}", sql);
             let params = fetch.params;
-            let mut query = sqlx::query::<Postgres>(sql);
+            let mut query = sqlx::query::<Postgres>(sqlx::AssertSqlSafe(sql));
             for param in params {
                 query = PostgresParam::add_param(*param, query);
             }
@@ -104,7 +104,7 @@ impl Client for PostgresClient {
     }
 }
 
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 #[async_trait]
 impl StreamClient for PostgresClient {
     /// Run the SQL streaming the results back in a future::stream
@@ -122,7 +122,7 @@ impl StreamClient for PostgresClient {
     }
 }
 
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 mod row_stream;
 
 pub trait PostgresParam {

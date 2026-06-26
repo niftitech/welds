@@ -55,7 +55,7 @@ impl<T> DataSet<T> {
         Self { primary, related }
     }
 
-    pub fn iter(&self) -> DataSetIter<T> {
+    pub fn iter(&self) -> DataSetIter<'_, T> {
         DataSetIter {
             index: 0,
             inner: self,
@@ -92,7 +92,7 @@ impl<T> DataSet<T> {
     }
 
     /// access a <T> at a given index.
-    pub fn get(&self, index: usize) -> Option<DataAccessGuard<T>> {
+    pub fn get(&self, index: usize) -> Option<DataAccessGuard<'_, T>> {
         let obj = self.primary.get(index)?;
         Some(DataAccessGuard {
             inner: obj,
@@ -107,6 +107,7 @@ pub struct DataAccessGuard<'t, T> {
 }
 
 impl<'t, T> DataAccessGuard<'t, T> {
+    #[allow(clippy::should_implement_trait)]
     pub fn as_ref(&self) -> &'t T {
         self.inner.as_ref()
     }
@@ -133,8 +134,8 @@ where
     where
         'g: 't,
         't: 'g,
-        T: HasRelations,
-        Ship: 'static + Relationship<R>,
+        T: 'static + HasRelations,
+        Ship: 'static + Relationship<T, R>,
         R: HasSchema,
         R: 'static + Send + Sync + HasSchema,
         <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
@@ -144,7 +145,7 @@ where
         let t: &T = self.inner.as_ref();
         // find the set of data that would fit
         for rset in &self.sets.related {
-            if let Some(related_set) = rset.downcast_ref::<R, Ship>() {
+            if let Some(related_set) = rset.downcast_ref::<T, R, Ship>() {
                 // check that we are working with the same relationship
                 let ship = relationship(Default::default());
                 if related_set.ship == ship {
@@ -171,8 +172,8 @@ where
     where
         'g: 't,
         't: 'g,
-        T: HasRelations,
-        Ship: 'static + Relationship<R>,
+        T: 'static + HasRelations,
+        Ship: 'static + Relationship<T, R>,
         R: HasSchema + ToOwned<Owned = R>,
         R: HasSchema,
         R: 'static + Send + Sync + HasSchema,
@@ -183,7 +184,7 @@ where
         let t: &T = self.inner.as_ref();
         // find the set of data that would fit
         for rset in &self.sets.related {
-            if let Some(related_set) = rset.downcast_ref::<R, Ship>() {
+            if let Some(related_set) = rset.downcast_ref::<T, R, Ship>() {
                 // check that we are working with the same relationship
                 let ship = relationship(Default::default());
                 if related_set.ship == ship {

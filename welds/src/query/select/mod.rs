@@ -7,13 +7,13 @@ use crate::{Syntax, WeldsError};
 use welds_connections::Client;
 use welds_connections::Row;
 
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use futures::StreamExt;
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use futures::TryStreamExt;
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use futures_core::stream::BoxStream;
-#[cfg(feature = "unstable-api")]
+#[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
 use welds_connections::StreamClient;
 
 mod writer;
@@ -23,6 +23,7 @@ pub use writer::SelectWriter;
 // This file contains all the stuff added onto the Querybuilder to allow it to run SELECTs
 // ******************************************************************************************
 
+#[maybe_async::maybe_async]
 impl<T> QueryBuilder<T>
 where
     T: Send + HasSchema,
@@ -80,7 +81,7 @@ where
         <T as HasSchema>::Schema: TableInfo + TableColumns,
     {
         let table = TableIdent::from_model::<T>();
-        let columns = <T as HasSchema>::Schema::readable_columns();
+        let columns = <T as HasSchema>::Schema::select_columns();
         let writer = SelectWriter::new_with_alias(syntax, &table, &self.alias);
         writer.sql(
             &columns,
@@ -105,7 +106,7 @@ where
         let mut args: Option<ParamArgs> = Some(Vec::default());
 
         let table = TableIdent::from_model::<T>();
-        let columns = <T as HasSchema>::Schema::readable_columns();
+        let columns = <T as HasSchema>::Schema::select_columns();
         let writer = SelectWriter::new_with_alias(syntax, &table, &self.alias);
         let sql = writer.sql(
             &columns,
@@ -129,7 +130,7 @@ where
     }
 
     /// Executes the query in the database returning the results
-    #[cfg(feature = "unstable-api")]
+    #[cfg(all(not(feature = "__sync"), feature = "unstable-api"))]
     pub async fn stream<'e, 'q, 'c, C>(&'q self, client: &'c C) -> BoxStream<'e, Result<T>>
     where
         'q: 'e,
@@ -145,7 +146,7 @@ where
         let mut args: Option<ParamArgs> = Some(Vec::default());
 
         let table = TableIdent::from_model::<T>();
-        let columns = <T as HasSchema>::Schema::readable_columns();
+        let columns = <T as HasSchema>::Schema::select_columns();
         let writer = SelectWriter::new_with_alias(syntax, &table, &self.alias);
         let sql = writer.sql(
             &columns,

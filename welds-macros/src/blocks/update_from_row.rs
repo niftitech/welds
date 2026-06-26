@@ -7,7 +7,7 @@ pub(crate) fn write(info: &Info) -> TokenStream {
     let fields: Vec<_> = info
         .columns
         .iter()
-        .filter(|x| !x.ignore)
+        .filter(|x| x.selectable)
         .map(setfield)
         .collect();
     let fields = quote! { #(#fields)* };
@@ -18,7 +18,9 @@ pub(crate) fn write(info: &Info) -> TokenStream {
 pub(crate) fn setfield(col: &Column) -> TokenStream {
     let dbname = col.dbname.as_str();
     let field = &col.field;
-    quote! { self.#field = row.get(#dbname)?; }
+    quote! {
+        if row.has(#dbname) { self.#field = row.get(#dbname)?; }
+    }
 }
 
 pub(crate) fn write_for_db(info: &Info, fieldsets: &TokenStream) -> TokenStream {
@@ -52,8 +54,8 @@ mod tests {
         let expected: &str = r#"
             impl welds::model_traits::UpdateFromRow for Mock {
               fn update_from_row(&mut self, row: &mut welds::Row) -> welds::errors::Result<()> {
-                  self.id= row.get("id")?;
-                  self.name= row.get("name")?;
+                  if row.has("id") { self.id = row.get("id")?; }
+                  if row.has("name") { self.name= row.get("name")?; }
                   Ok(())
               }
             }

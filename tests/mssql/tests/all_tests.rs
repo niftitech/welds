@@ -8,6 +8,7 @@ use welds::state::{DbState, DbStatus};
 use welds::TransactStart;
 use welds::{Client, Syntax};
 
+mod binary;
 mod extra_types;
 mod group_by;
 mod migrations;
@@ -348,4 +349,46 @@ async fn should_be_able_to_write_mapquery_with_a_column_rename() {
     let sql = q.to_sql(Syntax::Mssql);
     eprintln!("SQL: {}", sql);
     q.run(&conn).await.unwrap();
+}
+
+#[tokio::test]
+async fn should_be_able_to_select_hourse_or_dog() {
+    use welds::query::clause::or;
+    let conn = get_conn().await;
+    use mssql_test::models::product::ProductSchema;
+
+    // verify pulling out lambda into variable
+    let clause = |x: ProductSchema| or(x.name.like("horse"), x.name.like("dog"));
+    let q = Product::all().where_col(clause);
+
+    eprintln!("SQL: {}", q.to_sql(Syntax::Sqlite));
+    let data = q.run(&conn).await.unwrap();
+    assert_eq!(data.len(), 2, "Expected horse and dog",);
+
+    // verify inline clause
+    let q2 = Product::all().where_col(|x| or(x.name.like("horse"), x.name.like("dog")));
+    eprintln!("SQL: {}", q2.to_sql(Syntax::Sqlite));
+    let data = q2.run(&conn).await.unwrap();
+    assert_eq!(data.len(), 2, "Expected horse and dog",);
+}
+
+#[tokio::test]
+async fn should_be_able_to_find_all_not_horses() {
+    use welds::query::clause::not;
+    let conn = get_conn().await;
+    // get expected count for non-horse
+    let total = Product::all().count(&conn).await.unwrap();
+    let horses = Product::where_col(|x| x.name.like("horse"))
+        .count(&conn)
+        .await
+        .unwrap();
+    // for this test to be valid we want to make sure there are horses,
+    // and there are non-horses
+    assert!(horses > 0);
+    assert!(horses != total);
+    // get not-horse count
+    let q = Product::where_col(|x| not(x.name.like("horse")));
+    let not_horse_count = q.count(&conn).await.unwrap();
+    // verify not-horse count is total of everything not a horse
+    assert_eq!(total - horses, not_horse_count);
 }

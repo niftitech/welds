@@ -2,6 +2,7 @@ use sqlite_test::models::order::{Order, SmallOrder};
 use sqlite_test::models::product::{BadProduct1, BadProduct2, Product};
 use sqlite_test::models::StringThing;
 use sqlite_test::models::{Thing1, Thing2, Thing3};
+use sqlx::Executor;
 use welds::connections::sqlite::SqliteClient;
 use welds::connections::TransactStart;
 use welds::state::{DbState, DbStatus};
@@ -12,15 +13,38 @@ pub mod bulk_update;
 pub mod callbacks;
 pub mod extra_types;
 pub mod group_by;
+pub mod ignores;
 pub mod includes;
 pub mod migrations;
 pub mod select_col;
 pub mod streams;
 pub mod sub_query_tests;
+
+// Get a DB connection for testing
 async fn get_conn() -> SqliteClient {
-    let conn = testlib::sqlite::conn().await.unwrap();
+    let conn = conn_inner().await.unwrap();
     let client: SqliteClient = conn.into();
     client
+}
+
+/// Build a Connection to test the Sqlite database.
+/// db is pre-seeded with contents for test.
+pub async fn conn_inner() -> Result<sqlx::SqlitePool, sqlx::Error> {
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await?;
+
+    // Make the tables
+    let schema = include_str!("../../testlib/databases/sqlite/01_create_tables.sql");
+    let _r = pool.clone().execute(schema).await.unwrap();
+
+    // Add Data to table
+    let schema = include_str!("../../testlib/databases/sqlite/02_add_test_data.sql");
+    let _r = pool.clone().execute(schema).await.unwrap();
+
+    // Add Views
+    let schema = include_str!("../../testlib/databases/sqlite/03_create_views.sql");
+    let _r = pool.clone().execute(schema).await.unwrap();
+
+    Ok(pool)
 }
 
 #[derive(Default, Debug, Clone)]
@@ -584,53 +608,47 @@ fn should_be_able_to_fetch_a_single_object() {
 }
 
 #[test]
-fn should_be_able_to_select_a_readonly_field() {
+fn should_be_able_to_select_hourse_or_dog() {
     async_std::task::block_on(async {
-        use sqlite_test::models::product::ProductNameOnly;
+        use welds::query::clause::or;
         let conn = get_conn().await;
-        let product = ProductNameOnly::where_col(|p| p.description.not_equal(None))
-            .fetch_one(&conn)
-            .await
-            .unwrap();
-        assert!(product.description.is_some());
+        use sqlite_test::models::product::ProductSchema;
+
+        // verify pulling out lambda into variable
+        let clause = |x: ProductSchema| or(x.name.like("horse"), x.name.like("dog"));
+        let q = Product::all().where_col(clause);
+
+        eprintln!("SQL: {}", q.to_sql(Syntax::Sqlite));
+        let data = q.run(&conn).await.unwrap();
+        assert_eq!(data.len(), 2, "Expected horse and dog",);
+
+        // verify inline clause
+        let q2 = Product::all().where_col(|x| or(x.name.like("horse"), x.name.like("dog")));
+        eprintln!("SQL: {}", q2.to_sql(Syntax::Sqlite));
+        let data = q2.run(&conn).await.unwrap();
+        assert_eq!(data.len(), 2, "Expected horse and dog",);
     })
 }
 
 #[test]
-fn should_not_update_changes_to_readonly_field() {
+fn should_be_able_to_find_all_not_horses() {
     async_std::task::block_on(async {
-        use sqlite_test::models::product::ProductNameOnly;
+        use welds::query::clause::not;
         let conn = get_conn().await;
-        let mut product = ProductNameOnly::where_col(|p| p.description.not_equal(None))
-            .fetch_one(&conn)
+        // get expected count for non-horse
+        let total = Product::all().count(&conn).await.unwrap();
+        let horses = Product::where_col(|x| x.name.like("horse"))
+            .count(&conn)
             .await
             .unwrap();
-        product.description = None;
-        product.save(&conn).await.unwrap();
-        let product = ProductNameOnly::find_by_id(&conn, product.id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(product.description.is_some());
-    })
-}
-
-#[test]
-fn should_not_insert_to_readonly_field() {
-    async_std::task::block_on(async {
-        use sqlite_test::models::product::ProductNameOnly;
-        let conn = get_conn().await;
-
-        let mut product = ProductNameOnly::new();
-        product.name = "Test".to_string();
-        product.description = Some("Test".to_string());
-        product.save(&conn).await.unwrap();
-        //re-pull the model from the database
-        let product = ProductNameOnly::find_by_id(&conn, product.id)
-            .await
-            .unwrap()
-            .unwrap();
-        // description should not be include in the insert
-        assert!(product.description.is_none());
+        // for this test to be valid we want to make sure there are horses,
+        // and there are non-horses
+        assert!(horses > 0);
+        assert!(horses != total);
+        // get not-horse count
+        let q = Product::where_col(|x| not(x.name.like("horse")));
+        let not_horse_count = q.count(&conn).await.unwrap();
+        // verify not-horse count is total of everything not a horse
+        assert_eq!(total - horses, not_horse_count);
     })
 }

@@ -2,6 +2,7 @@ use crate::writers::ColumnWriter;
 use welds_connections::Syntax;
 
 /// What is added to the query_builder, will be build into SQL
+#[derive(Clone)]
 pub(crate) struct SelectColumn {
     pub(crate) col_name: String,
     pub(crate) field_name: String,
@@ -21,7 +22,7 @@ impl SelectRender {
 
 impl SelectKind {
     pub fn is_aggregate(&self) -> bool {
-        ![SelectKind::All, SelectKind::Column].contains(&self)
+        ![SelectKind::All, SelectKind::Column].contains(self)
     }
 }
 
@@ -32,6 +33,8 @@ pub(crate) enum SelectKind {
     Count,
     Max,
     Min,
+    Average,
+    Sum,
 }
 
 /// used while writing SQL to help keep track of parts of the select
@@ -78,6 +81,12 @@ impl SelectRender {
             }
             SelectKind::Min => {
                 format!("MIN({}.{}) AS {}", self.alias, colname, fieldname)
+            }
+            SelectKind::Average => {
+                format!("AVG({}.{}) AS {}", self.alias, colname, fieldname)
+            }
+            SelectKind::Sum => {
+                format!("SUM({}.{}) AS {}", self.alias, colname, fieldname)
             }
         }
     }

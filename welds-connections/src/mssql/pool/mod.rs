@@ -2,13 +2,13 @@ use super::{Client, Param};
 use crate::errors::Error::PoolError;
 use crate::errors::Result;
 use async_mutex::Mutex as AsyncMutex;
-use bb8::ManageConnection;
-use bb8_tiberius::ConnectionManager;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::Duration;
 use tokio::task::yield_now;
+use tokio::time::sleep;
 
 #[cfg(feature = "unstable-api")]
 pub(crate) mod pooled_stream;
@@ -33,7 +33,7 @@ mod pooledconnection;
 pub(crate) use pooledconnection::PooledConnection;
 
 pub(crate) struct Pool {
-    mgr: ConnectionManager,
+    ado_connection_string: String,
     slots: Vec<Mutex<Slot>>,
     round_robin_next: Mutex<usize>,
     tx: Sender<(TiberiusConn, ConnectionStatus)>,
@@ -41,7 +41,7 @@ pub(crate) struct Pool {
 
 impl Pool {
     /// Create a new connection pool
-    pub fn new(mgr: ConnectionManager) -> Arc<Self> {
+    pub fn new(ado: impl Into<String>) -> Arc<Self> {
         let size = 10;
         let mut slots = Vec::with_capacity(size);
         for _ in 0..size {
@@ -51,7 +51,7 @@ impl Pool {
         let (tx, rx) = channel();
 
         let me = Arc::new(Self {
-            mgr,
+            ado_connection_string: ado.into(),
             slots,
             round_robin_next: Mutex::new(0),
             tx,
@@ -73,7 +73,8 @@ impl Pool {
         };
 
         loop {
-            let checked_out = try_checkout(slot_index, &self.slots, &self.mgr).await?;
+            let cs = self.ado_connection_string.as_str();
+            let checked_out = try_checkout(slot_index, &self.slots, cs).await?;
 
             if let Some(tiberius_conn) = checked_out {
                 // save off the next slot to use
@@ -98,6 +99,7 @@ impl Pool {
     }
 
     /// returns a string displaying the status of each Slot in the pool
+    #[allow(dead_code)]
     pub async fn status(&self) -> String {
         let mut display = Vec::with_capacity(self.slots.len() + 2);
         display.push('[');
@@ -120,7 +122,7 @@ impl Pool {
 async fn try_checkout(
     index: usize,
     slots: &[Mutex<Slot>],
-    mgr: &ConnectionManager,
+    ado: &str,
 ) -> Result<Option<TiberiusConn>> {
     // lock the mutex and do the checking out part.
     let slot: Slot = {
@@ -150,20 +152,44 @@ async fn try_checkout(
         None => {
             // build a new connection
             log::debug!("MSSQL POOL adding Connection");
-            let new_conn = mgr.connect().await?;
+            let new_conn = build_connection(ado).await?;
             Ok(Some(new_conn))
         }
         Some(mut conn) => {
             // make sure the connection isn't dead
             if conn.execute("SELECT 1", &[]).await.is_err() {
                 log::debug!("MSSQL POOL rebuild Connection");
-                let new_conn = mgr.connect().await?;
+                let new_conn = build_connection(ado).await?;
                 Ok(Some(new_conn))
             } else {
                 Ok(Some(conn))
             }
         }
     }
+}
+
+async fn build_connection(ado: &str) -> Result<TiberiusConn> {
+    let config = tiberius::Config::from_ado_string(ado)?;
+
+    use crate::errors::Error;
+    use tiberius::Client;
+    use tokio::net::TcpStream;
+    use tokio_util::compat::TokioAsyncWriteCompatExt;
+
+    let tcp = TcpStream::connect(config.get_addr())
+        .await
+        .map_err(Error::TiberiusConnPool)?;
+
+    tcp.set_nodelay(true).map_err(Error::TiberiusConnPool)?;
+
+    let mut client = Client::connect(config, tcp.compat_write())
+        .await
+        .map_err(Error::Tiberius)?;
+
+    //verify the client if working before returning it as valid.
+    let _ = client.simple_query("SELECT 1").await?;
+
+    Ok(client)
 }
 
 pub(crate) enum Slot {
@@ -180,8 +206,16 @@ pub(crate) enum ConnectionStatus {
 
 async fn pool_return(pool: Arc<Pool>, mut rx: Receiver<(TiberiusConn, ConnectionStatus)>) {
     loop {
-        let _ = pool_return_inner(pool.clone(), &mut rx).await;
+        if let Ok(returned_count) = pool_return_inner(pool.clone(), &mut rx).await
+            && returned_count == 0
+        {
+            // If we aren't actively using the pool, don't just hammer the CPU
+            // if we don't have returned connections. Back off the return job
+            sleep(Duration::from_millis(10)).await;
+        }
+
         if Arc::strong_count(&pool) == 1 {
+            // If we are the lass reference to the pool, no need to keep going
             return;
         }
         yield_now().await;
@@ -191,10 +225,10 @@ async fn pool_return(pool: Arc<Pool>, mut rx: Receiver<(TiberiusConn, Connection
 async fn pool_return_inner(
     pool: Arc<Pool>,
     rx: &mut Receiver<(TiberiusConn, ConnectionStatus)>,
-) -> Result<()> {
+) -> Result<usize> {
     // wait for a connection to be returned
     let tuple = match rx.try_recv().ok() {
-        None => return Ok(()),
+        None => return Ok(0),
         Some(conn) => conn,
     };
 
@@ -249,5 +283,5 @@ async fn pool_return_inner(
         panic!("unable to return a connection to the connection pool, pool is full");
         //
     });
-    Ok(())
+    Ok(1)
 }

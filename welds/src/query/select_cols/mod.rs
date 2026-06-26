@@ -1,4 +1,4 @@
-use crate::model_traits::{HasSchema, TableColumns, TableInfo, UniqueIdentifier};
+use crate::model_traits::{HasSchema, TableColumns, TableInfo};
 use crate::query::builder::QueryBuilder;
 use crate::query::clause::{AsFieldName, ClauseAdder};
 use crate::query::select_cols::group_by::GroupBy;
@@ -30,6 +30,19 @@ pub struct SelectBuilder<T> {
     selects: Vec<SelectColumn>,
     joins: Vec<JoinBuilder>,
     group_bys: Vec<GroupBy>,
+    distinct: bool,
+}
+
+impl<T> Clone for SelectBuilder<T> {
+    fn clone(&self) -> Self {
+        Self {
+            qb: self.qb.clone(),
+            selects: self.selects.clone(),
+            joins: self.joins.clone(),
+            group_bys: self.group_bys.clone(),
+            distinct: self.distinct,
+        }
+    }
 }
 
 impl<T> SelectBuilder<T>
@@ -42,6 +55,7 @@ where
             selects: Vec::default(),
             joins: Vec::default(),
             group_bys: Vec::default(),
+            distinct: false,
         }
     }
 
@@ -129,6 +143,34 @@ where
         self
     }
 
+    pub fn select_avg<V, FN: AsFieldName<V>>(
+        mut self,
+        lam: impl Fn(<T as HasSchema>::Schema) -> FN,
+        as_name: &'static str,
+    ) -> SelectBuilder<T> {
+        let field = lam(Default::default());
+        self.selects.push(SelectColumn {
+            col_name: field.colname().to_string(),
+            field_name: as_name.to_string(),
+            kind: SelectKind::Average,
+        });
+        self
+    }
+
+    pub fn select_sum<V, FN: AsFieldName<V>>(
+        mut self,
+        lam: impl Fn(<T as HasSchema>::Schema) -> FN,
+        as_name: &'static str,
+    ) -> SelectBuilder<T> {
+        let field = lam(Default::default());
+        self.selects.push(SelectColumn {
+            col_name: field.colname().to_string(),
+            field_name: as_name.to_string(),
+            kind: SelectKind::Sum,
+        });
+        self
+    }
+
     /// Filter the results returned by this query.
     /// Used when you want to filter on the columns of this table.
     pub fn where_col(
@@ -151,12 +193,12 @@ where
     ) -> Self
     where
         T: HasRelations,
-        Ship: Relationship<R>,
+        Ship: Relationship<T, R>,
         R: HasSchema,
         T: HasSchema,
         R: Send + HasSchema,
-        <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
-        <T as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
+        <R as HasSchema>::Schema: TableInfo + TableColumns,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
         <T as HasRelations>::Relation: Default,
     {
         self.qb = self.qb.where_relation(relationship, filter);
@@ -171,11 +213,11 @@ where
     ) -> Self
     where
         T: HasRelations,
-        Ship: Relationship<R>,
+        Ship: Relationship<T, R>,
         R: HasSchema,
         R: Send + HasSchema,
-        <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
-        <T as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
+        <R as HasSchema>::Schema: TableInfo + TableColumns,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
     {
         self.join_with(relationship, sb, Join::Inner)
     }
@@ -188,11 +230,11 @@ where
     ) -> Self
     where
         T: HasRelations,
-        Ship: Relationship<R>,
+        Ship: Relationship<T, R>,
         R: HasSchema,
         R: Send + HasSchema,
-        <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
-        <T as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
+        <R as HasSchema>::Schema: TableInfo + TableColumns,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
     {
         self.join_with(relationship, sb, Join::Left)
     }
@@ -207,11 +249,11 @@ where
     ) -> Self
     where
         T: HasRelations,
-        Ship: Relationship<R>,
+        Ship: Relationship<T, R>,
         R: HasSchema,
         R: Send + HasSchema,
-        <R as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
-        <T as HasSchema>::Schema: TableInfo + TableColumns + UniqueIdentifier,
+        <R as HasSchema>::Schema: TableInfo + TableColumns,
+        <T as HasSchema>::Schema: TableInfo + TableColumns,
     {
         let ship = relationship(Default::default());
         sb.set_aliases(&self.qb.alias_asigner);
@@ -220,8 +262,8 @@ where
             .drain(..)
             .map(|gb| self.group_bys.push(gb.set_alias(&sb.qb.alias)))
             .collect::<Vec<_>>();
-        let outer_key = ship.my_key::<R::Schema, T::Schema>();
-        let inner_key = ship.their_key::<R::Schema, T::Schema>();
+        let outer_key = ship.my_key();
+        let inner_key = ship.their_key();
         let mut jb = JoinBuilder::new(sb, outer_key, inner_key);
         jb.ty = join_type;
         self.joins.push(jb);
@@ -234,6 +276,12 @@ where
     ) -> Self {
         let field = lam(Default::default());
         self.group_bys.push(GroupBy::new(field.colname()));
+        self
+    }
+
+    /// Adds a "select distinct" instead of "select" when selecting from the database
+    pub fn distinct(mut self) -> Self {
+        self.distinct = true;
         self
     }
 
@@ -273,8 +321,19 @@ where
 
     /// Manually write the order by part of the query.
     /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
-    pub fn order_manual(mut self, sql: &str) -> Self {
-        self.qb = self.qb.order_manual(sql);
+    pub fn order_manual(self, sql: &'static str) -> Self {
+        self.order_manual_nonstatic(sql)
+    }
+
+    /// Manually write the order by part of the query.
+    ///
+    /// SQL template may be built at runtime. Caller must ensure identifiers (e.g. column names)
+    /// are whitelist-validated and all user-supplied values are bound via `?` and `ManualParam`.
+    /// This does not relax parameter binding requirements.
+    ///
+    /// NOTE: use '$' for table prefix/alias. It will be swapped out for the prefix used at runtime
+    pub fn order_manual_nonstatic(mut self, sql: &str) -> Self {
+        self.qb = self.qb.order_manual_nonstatic(sql);
         self
     }
 
